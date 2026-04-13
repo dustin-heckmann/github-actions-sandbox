@@ -1,0 +1,69 @@
+name: Manage Deployment Tags
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Tag operation to perform
+        required: true
+        type: choice
+        options:
+          - create-baseline
+          - move-baseline
+          - mark-staging-dirty
+          - clean-staging-dirty
+
+permissions:
+  contents: write
+
+jobs:
+  manage-tags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Show deployed/* tags BEFORE
+        run: |
+          echo "=== deployed/* tags BEFORE ==="
+          git fetch --tags
+          git tag -l 'deployed/*' | while read tag; do
+            echo "  $tag -> $(git rev-parse $tag)"
+          done || echo "  (none)"
+
+      - name: create-baseline
+        if: inputs.action == 'create-baseline'
+        run: |
+          git tag deployed/baseline HEAD
+          git push origin deployed/baseline
+          echo "Created deployed/baseline at $(git rev-parse HEAD)"
+
+      - name: move-baseline
+        if: inputs.action == 'move-baseline'
+        run: |
+          git tag -f deployed/baseline HEAD
+          git push origin --force deployed/baseline
+          echo "Force-updated deployed/baseline to $(git rev-parse HEAD)"
+
+      - name: mark-staging-dirty
+        if: inputs.action == 'mark-staging-dirty'
+        run: |
+          git tag deployed/staging/dirty HEAD
+          git push origin deployed/staging/dirty
+          echo "Created deployed/staging/dirty at $(git rev-parse HEAD)"
+
+      - name: clean-staging-dirty
+        if: inputs.action == 'clean-staging-dirty'
+        run: |
+          git push origin --delete deployed/staging/dirty
+          echo "Deleted deployed/staging/dirty"
+
+      - name: Show deployed/* tags AFTER
+        run: |
+          echo "=== deployed/* tags AFTER ==="
+          git fetch --tags
+          git tag -l 'deployed/*' | while read tag; do
+            echo "  $tag -> $(git rev-parse $tag)"
+          done || echo "  (none)"
