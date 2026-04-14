@@ -1,0 +1,53 @@
+name: Debug Token Info 3
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get user installations and token payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== user installations ==="
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/user/installations" 2>&1 | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+if isinstance(d, dict):
+    if 'installations' in d:
+        for inst in d.get('installations', []):
+            print('installation_id:', inst.get('id'), 'app_id:', inst.get('app_id'), 'app_slug:', inst.get('app_slug'))
+    else:
+        print(json.dumps(d, indent=2)[:200])
+else:
+    print(str(d)[:200])
+"
+          
+          echo ""
+          echo "=== token payload attempt ==="
+          # Try to decode the token as JWT (base64 segments)
+          echo "$GH_TOKEN" | python3 -c "
+import sys, base64, json
+token = sys.stdin.read().strip()
+parts = token.split('.')
+if len(parts) == 3:
+    payload = parts[1]
+    # Add padding
+    payload += '=' * (4 - len(payload) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(payload)
+        print(json.dumps(json.loads(decoded), indent=2))
+    except Exception as e:
+        print('Not a standard JWT:', e)
+        print('Token prefix:', token[:20])
+else:
+    print('Not a JWT format, parts:', len(parts))
+    print('Token prefix:', token[:20])
+"
