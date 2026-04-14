@@ -32,6 +32,7 @@ jobs:
     uses: ./.github/workflows/ee-manage-deployment-tag.yaml
     with:
       action: ${{ inputs.action }}
-    secrets:
-      # In an org: inherited from org-level secrets, not visible to the caller.
-      EE_TAG_MANAGER_KEY: ${{ secrets.DEPLOY_KEY }}
+    # secrets: inherit passes all repo/org secrets to the reusable workflow.
+    # In an org the EE_TAG_MANAGER_KEY secret would be an org-level secret
+    # scoped only to the ee-workflows repo — consuming teams can't read it.
+    secrets: inherit
