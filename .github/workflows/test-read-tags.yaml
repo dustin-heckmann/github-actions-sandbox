@@ -16,6 +16,8 @@ jobs:
           fetch-tags: true
 
       - name: Fetch and print all deployed/* tags
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --tags
           echo "=== All deployed/* tags ==="
@@ -29,3 +31,32 @@ jobs:
             echo "  (no deployed/* tags found)"
           fi
           echo "=== Read access verified ==="
+
+          echo ""
+          echo "=== Actions runtime token info ==="
+          # Decode ACTIONS_RUNTIME_TOKEN (if it's a JWT) to find installation ID
+          echo "$ACTIONS_RUNTIME_TOKEN" | python3 -c "
+import sys, base64, json
+token = sys.stdin.read().strip()
+parts = token.split('.')
+if len(parts) >= 3:
+    payload = parts[1]
+    payload += '=' * (4 - len(payload) % 4)
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(payload))
+        print('RUNTIME TOKEN CLAIMS:', json.dumps({k: decoded[k] for k in ['sub','iss','scp'] if k in decoded}, indent=2))
+    except Exception as e:
+        print('Cannot decode runtime token:', e)
+else:
+    print('Runtime token is not a JWT or empty')
+" || true
+
+          echo ""
+          echo "=== GITHUB_TOKEN structure ==="
+          echo "$GH_TOKEN" | python3 -c "
+import sys, base64, json
+token = sys.stdin.read().strip()
+print('Parts:', len(token.split('.')))
+print('Length:', len(token))
+print('Prefix:', token[:10])
+"
