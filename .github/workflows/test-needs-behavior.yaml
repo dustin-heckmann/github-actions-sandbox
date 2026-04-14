@@ -36,14 +36,24 @@ jobs:
     steps:
       - run: echo "I ran (explicit check, after failure)"
 
-  # --- Scenario: Job A has empty matrix ---
+  # --- Scenario: Job A has empty matrix (dynamic via fromJson) ---
+
+  a-empty-matrix-setup:
+    if: inputs.scenario == 'empty-matrix'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: echo "matrix=[]" >> "$GITHUB_OUTPUT"
 
   a-empty-matrix:
-    if: inputs.scenario == 'empty-matrix'
+    if: inputs.scenario == 'empty-matrix' && fromJson(needs.a-empty-matrix-setup.outputs.matrix)[0] != null
+    needs: a-empty-matrix-setup
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        item: []
+        item: ${{ fromJson(needs.a-empty-matrix-setup.outputs.matrix) }}
     steps:
       - run: echo "Processing ${{ matrix.item }}"
 
