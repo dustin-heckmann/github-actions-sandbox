@@ -1,0 +1,81 @@
+name: Test needs behavior
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which scenario to test"
+        required: true
+        type: choice
+        options:
+          - failure
+          - empty-matrix
+
+jobs:
+  # --- Scenario: Job A fails ---
+
+  a-fails:
+    if: inputs.scenario == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "This job will fail"
+          exit 1
+
+  b-plain-needs-after-failure:
+    if: inputs.scenario == 'failure'
+    needs: a-fails
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "I ran (plain needs, after failure)"
+
+  b-explicit-check-after-failure:
+    if: always() && inputs.scenario == 'failure' && needs.a-fails.result == 'success'
+    needs: a-fails
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "I ran (explicit check, after failure)"
+
+  # --- Scenario: Job A has empty matrix ---
+
+  a-empty-matrix:
+    if: inputs.scenario == 'empty-matrix'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        item: []
+    steps:
+      - run: echo "Processing ${{ matrix.item }}"
+
+  b-plain-needs-after-empty-matrix:
+    if: inputs.scenario == 'empty-matrix'
+    needs: a-empty-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "I ran (plain needs, after empty matrix)"
+
+  b-explicit-check-after-empty-matrix:
+    if: always() && inputs.scenario == 'empty-matrix' && needs.a-empty-matrix.result == 'success'
+    needs: a-empty-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "I ran (explicit check, after empty matrix)"
+
+  # --- Summary ---
+
+  summary:
+    if: always()
+    needs:
+      - b-plain-needs-after-failure
+      - b-explicit-check-after-failure
+      - b-plain-needs-after-empty-matrix
+      - b-explicit-check-after-empty-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "## Results for scenario: ${{ inputs.scenario }}"
+          echo ""
+          echo "b-plain-needs-after-failure: ${{ needs.b-plain-needs-after-failure.result }}"
+          echo "b-explicit-check-after-failure: ${{ needs.b-explicit-check-after-failure.result }}"
+          echo "b-plain-needs-after-empty-matrix: ${{ needs.b-plain-needs-after-empty-matrix.result }}"
+          echo "b-explicit-check-after-empty-matrix: ${{ needs.b-explicit-check-after-empty-matrix.result }}"
