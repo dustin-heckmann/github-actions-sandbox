@@ -20,10 +20,22 @@ jobs:
   manage-tags:
     runs-on: ubuntu-latest
     steps:
+      - name: Configure SSH deploy key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global core.sshCommand "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-tags: true
+
+      - name: Set SSH push URL
+        run: |
+          git remote set-url --push origin git@github.com:${{ github.repository }}.git
 
       - name: Show deployed/* tags BEFORE
         run: |
