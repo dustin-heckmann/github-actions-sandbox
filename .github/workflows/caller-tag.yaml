@@ -1,0 +1,37 @@
+##
+## PRODUCT TEAM CALLER WORKFLOW — example of how a consuming team uses the
+## EE team's reusable workflow to manage deployment tags.
+##
+## In a real org, the `uses:` line points at the EE team's central repo:
+##   uses: org/ee-workflows/.github/workflows/ee-manage-deployment-tag.yaml@main
+##
+## The team does NOT need deploy keys, GitHub App credentials, or any
+## knowledge of the bypass mechanism — that's all encapsulated in the
+## reusable workflow.
+##
+
+name: "Product Team: Manage Deployment Tag"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Tag operation to perform
+        required: true
+        type: choice
+        options:
+          - create-baseline
+          - move-baseline
+          - mark-staging-dirty
+          - clean-staging-dirty
+
+jobs:
+  manage-tag:
+    # In a real org this resolves to the ee-workflows repo's hosted runner.
+    # Using the local reusable workflow for sandbox purposes.
+    uses: ./.github/workflows/ee-manage-deployment-tag.yaml
+    with:
+      action: ${{ inputs.action }}
+    secrets:
+      # In an org: inherited from org-level secrets, not visible to the caller.
+      EE_TAG_MANAGER_KEY: ${{ secrets.DEPLOY_KEY }}

@@ -1,0 +1,112 @@
+##
+## EE TEAM REUSABLE WORKFLOW
+##
+## In a real org this file lives in org/ee-workflows and is called as:
+##   uses: org/ee-workflows/.github/workflows/ee-manage-deployment-tag.yaml@main
+##
+## The DEPLOY_KEY secret simulates a GitHub App private key.
+## To migrate to a real GitHub App, replace the "Configure credentials" step with:
+##
+##   - uses: actions/create-github-app-token@v1
+##     id: app-token
+##     with:
+##       app-id: ${{ secrets.EE_TAG_MANAGER_APP_ID }}
+##       private-key: ${{ secrets.EE_TAG_MANAGER_PRIVATE_KEY }}
+##       owner: ${{ github.repository_owner }}
+##
+## ...and change the push remote auth below to use ${{ steps.app-token.outputs.token }}.
+## The bypass actor in the ruleset becomes the GitHub App installation instead of the deploy key.
+##
+
+name: EE — Manage Deployment Tag
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: "Tag operation: create-baseline | move-baseline | mark-staging-dirty | clean-staging-dirty"
+        required: true
+        type: string
+      ref:
+        description: Git ref to tag (defaults to the caller's HEAD SHA)
+        required: false
+        type: string
+        default: ""
+    secrets:
+      # In an org: org-level secret accessible only to the reusable workflow repo.
+      # Stand-in: deploy key private key. Real app: GitHub App private key.
+      EE_TAG_MANAGER_KEY:
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  manage-tag:
+    runs-on: ubuntu-latest
+    steps:
+      # ── Credentials ──────────────────────────────────────────────────────────
+      # REAL ORG: replace this step with actions/create-github-app-token@v1
+      # and use the resulting token for HTTPS pushes instead of SSH.
+      - name: Configure credentials (deploy key — stand-in for GitHub App token)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EE_TAG_MANAGER_KEY }}" > ~/.ssh/ee_key
+          chmod 600 ~/.ssh/ee_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global core.sshCommand "ssh -i ~/.ssh/ee_key -o IdentitiesOnly=yes"
+
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+          fetch-tags: true
+
+      - name: Set SSH push remote
+        run: git remote set-url --push origin git@github.com:${{ github.repository }}.git
+
+      # ── Before state ─────────────────────────────────────────────────────────
+      - name: Show deployed/* tags BEFORE
+        run: |
+          echo "=== deployed/* tags BEFORE ==="
+          git fetch --tags
+          git tag -l 'deployed/*' | while read -r tag; do
+            echo "  $tag -> $(git rev-parse "$tag")"
+          done || echo "  (none)"
+
+      # ── Tag operations ────────────────────────────────────────────────────────
+      - name: create-baseline
+        if: inputs.action == 'create-baseline'
+        run: |
+          git tag deployed/baseline HEAD
+          git push origin deployed/baseline
+          echo "Created deployed/baseline at $(git rev-parse HEAD)"
+
+      - name: move-baseline
+        if: inputs.action == 'move-baseline'
+        run: |
+          git tag -f deployed/baseline HEAD
+          git push origin --force deployed/baseline
+          echo "Force-updated deployed/baseline to $(git rev-parse HEAD)"
+
+      - name: mark-staging-dirty
+        if: inputs.action == 'mark-staging-dirty'
+        run: |
+          git tag deployed/staging/dirty HEAD
+          git push origin deployed/staging/dirty
+          echo "Created deployed/staging/dirty at $(git rev-parse HEAD)"
+
+      - name: clean-staging-dirty
+        if: inputs.action == 'clean-staging-dirty'
+        run: |
+          git push origin --delete deployed/staging/dirty
+          echo "Deleted deployed/staging/dirty"
+
+      # ── After state ───────────────────────────────────────────────────────────
+      - name: Show deployed/* tags AFTER
+        run: |
+          echo "=== deployed/* tags AFTER ==="
+          git fetch --tags
+          git tag -l 'deployed/*' | while read -r tag; do
+            echo "  $tag -> $(git rev-parse "$tag")"
+          done || echo "  (none)"
