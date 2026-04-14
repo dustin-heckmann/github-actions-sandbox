@@ -1,0 +1,43 @@
+name: Get OIDC Claims
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  get-claims:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get OIDC token and decode claims
+        run: |
+          # Request an OIDC token
+          OIDC_TOKEN=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=github-actions-installation-id" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+
+          echo "=== OIDC Token Claims ==="
+          echo "$OIDC_TOKEN" | python3 -c "
+          import sys, base64, json
+          token = sys.stdin.read().strip()
+          parts = token.split('.')
+          payload = parts[1]
+          payload += '=' * (4 - len(payload) % 4)
+          decoded = json.loads(base64.urlsafe_b64decode(payload))
+          print(json.dumps(decoded, indent=2))
+          "
+
+          echo ""
+          echo "=== Rate limit response with installation info ==="
+          # Check if the rate limit response reveals app/installation info
+          curl -sv -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/rate_limit" 2>&1 | grep -i "x-oauth-scopes\|x-accepted-oauth-scopes\|x-github-media\|app\|install" | head -20
+
+          echo ""
+          echo "=== Check installation repositories for URL ==="
+          curl -sv -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/installation/repositories?per_page=1" 2>&1 | grep -i "link\|url\|install" | head -10
