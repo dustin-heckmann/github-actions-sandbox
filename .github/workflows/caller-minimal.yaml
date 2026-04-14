@@ -1,0 +1,11 @@
+name: Caller Minimal Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: ./.github/workflows/ee-minimal.yaml
+    with:
+      msg: hello
+    secrets: inherit

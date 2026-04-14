@@ -1,0 +1,17 @@
+name: EE Minimal Test
+
+on:
+  workflow_call:
+    inputs:
+      msg:
+        required: true
+        type: string
+    secrets:
+      EE_TAG_MANAGER_KEY:
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "input=${{ inputs.msg }} key_set=${{ secrets.EE_TAG_MANAGER_KEY != '' }}"
