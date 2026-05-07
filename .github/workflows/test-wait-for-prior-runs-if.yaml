@@ -58,17 +58,34 @@ jobs:
           echo "Deploying ${{ matrix.app }}"
           echo "wait-for-prior-runs result was: ${{ needs.wait-for-prior-runs.result }}"
 
+  # Same condition but WITHOUT always() — can we simplify?
+  build-push-deploy-no-always:
+    needs:
+      - app-changes
+      - wait-for-prior-runs
+    if: ${{ needs.app-changes.outputs.matrix != '[]' && (needs.wait-for-prior-runs.result == 'success' || needs.wait-for-prior-runs.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.app-changes.outputs.matrix) }}
+    steps:
+      - run: |
+          echo "Deploying ${{ matrix.app }} (no-always variant)"
+          echo "wait-for-prior-runs result was: ${{ needs.wait-for-prior-runs.result }}"
+
   summary:
     if: always()
     needs:
       - app-changes
       - wait-for-prior-runs
       - build-push-deploy
+      - build-push-deploy-no-always
     runs-on: ubuntu-latest
     steps:
       - run: |
           echo "## Scenario: ${{ inputs.scenario }}"
           echo ""
-          echo "app-changes:          ${{ needs.app-changes.result }}"
-          echo "wait-for-prior-runs:  ${{ needs.wait-for-prior-runs.result }}"
-          echo "build-push-deploy:    ${{ needs.build-push-deploy.result }}"
+          echo "app-changes:              ${{ needs.app-changes.result }}"
+          echo "wait-for-prior-runs:      ${{ needs.wait-for-prior-runs.result }}"
+          echo "build-push-deploy:        ${{ needs.build-push-deploy.result }}"
+          echo "build-push-deploy-no-always: ${{ needs.build-push-deploy-no-always.result }}"
