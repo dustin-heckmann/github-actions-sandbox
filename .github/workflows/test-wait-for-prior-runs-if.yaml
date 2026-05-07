@@ -1,0 +1,74 @@
+name: "Test: wait-for-prior-runs if condition"
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which scenario to test"
+        required: true
+        type: choice
+        options:
+          - wait-succeeds
+          - wait-fails
+          - wait-skipped
+
+jobs:
+  app-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          echo 'matrix=["app-a"]' >> "$GITHUB_OUTPUT"
+          echo "Simulated app-changes: found apps to deploy"
+
+  # Simulates the wait-for-prior-runs reusable workflow.
+  # In the real workflow this is skipped on non-main branches;
+  # here we skip it via the "wait-skipped" input to simulate that.
+  wait-for-prior-runs:
+    needs: app-changes
+    if: ${{ inputs.scenario != 'wait-skipped' && needs.app-changes.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate wait result
+        run: |
+          if [ "${{ inputs.scenario }}" = "wait-fails" ]; then
+            echo "Simulating Turnstyle timeout (exit 1)..."
+            exit 1
+          fi
+          echo "Simulating successful wait..."
+
+  # This uses the EXACT same if condition as the reconciliation-monorepo PR.
+  # Expected behavior:
+  #   wait-succeeds → deploy RUNS  (wait result = success)
+  #   wait-fails    → deploy SKIPPED (wait result = failure)
+  #   wait-skipped  → deploy RUNS  (wait result = skipped)
+  build-push-deploy:
+    needs:
+      - app-changes
+      - wait-for-prior-runs
+    if: ${{ always() && needs.app-changes.outputs.matrix != '[]' && (needs.wait-for-prior-runs.result == 'success' || needs.wait-for-prior-runs.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.app-changes.outputs.matrix) }}
+    steps:
+      - run: |
+          echo "Deploying ${{ matrix.app }}"
+          echo "wait-for-prior-runs result was: ${{ needs.wait-for-prior-runs.result }}"
+
+  summary:
+    if: always()
+    needs:
+      - app-changes
+      - wait-for-prior-runs
+      - build-push-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "## Scenario: ${{ inputs.scenario }}"
+          echo ""
+          echo "app-changes:          ${{ needs.app-changes.result }}"
+          echo "wait-for-prior-runs:  ${{ needs.wait-for-prior-runs.result }}"
+          echo "build-push-deploy:    ${{ needs.build-push-deploy.result }}"
