@@ -1,0 +1,35 @@
+name: 'Emit masked + unmasked outputs'
+description: >
+  Emits two outputs derived from the same step. One value is registered as a
+  secret via the ::add-mask:: workflow command (the same mechanism that
+  google-github-actions/get-secretmanager-secrets uses internally). The other
+  is returned as-is. Useful for demonstrating how GitHub Actions handles
+  masked values when they cross job-output boundaries.
+
+inputs:
+  seed:
+    description: 'Arbitrary string mixed into the emitted values so each run is unique'
+    required: false
+    default: 'demo'
+
+outputs:
+  MASKED_VALUE:
+    description: 'Output value that was registered as a secret via ::add-mask::'
+    value: ${{ steps.emit.outputs.MASKED_VALUE }}
+  UNMASKED_VALUE:
+    description: 'Output value emitted without masking (control case)'
+    value: ${{ steps.emit.outputs.UNMASKED_VALUE }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: emit
+      shell: bash
+      env:
+        SEED: ${{ inputs.seed }}
+      run: |
+        MASKED="masked-${SEED}-${RANDOM}"
+        UNMASKED="plain-${SEED}-${RANDOM}"
+        echo "::add-mask::$MASKED"
+        echo "MASKED_VALUE=$MASKED" >> "$GITHUB_OUTPUT"
+        echo "UNMASKED_VALUE=$UNMASKED" >> "$GITHUB_OUTPUT"
