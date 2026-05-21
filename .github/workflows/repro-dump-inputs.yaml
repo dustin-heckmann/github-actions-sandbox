@@ -1,0 +1,38 @@
+name: Reusable — dump inputs
+
+# Receives two string inputs and reports their actual byte length and sha256.
+# Used by the cross-job-masked-output repro to demonstrate what reaches a
+# reusable workflow's job through the `with:` boundary (the same boundary
+# the broken docker-build PR was using).
+
+on:
+  workflow_call:
+    inputs:
+      MASKED:
+        description: 'Value previously registered with ::add-mask::'
+        required: true
+        type: string
+      UNMASKED:
+        description: 'Control value (never masked)'
+        required: true
+        type: string
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect received inputs
+        env:
+          MASKED_INPUT: ${{ inputs.MASKED }}
+          UNMASKED_INPUT: ${{ inputs.UNMASKED }}
+        run: |
+          echo "::group::Reusable workflow inputs received via 'with:'"
+          echo "masked   length: ${#MASKED_INPUT}"
+          echo "unmasked length: ${#UNMASKED_INPUT}"
+          echo "masked   sha256: $(printf '%s' "$MASKED_INPUT" | sha256sum)"
+          echo "unmasked sha256: $(printf '%s' "$UNMASKED_INPUT" | sha256sum)"
+          echo "masked   raw (will display as *** if non-empty): [$MASKED_INPUT]"
+          echo "unmasked raw                                   : [$UNMASKED_INPUT]"
+          echo "masked   equals literal '***' ? $([[ "$MASKED_INPUT" == "***" ]] && echo YES || echo NO)"
+          echo "masked   empty                ? $([[ -z "$MASKED_INPUT" ]] && echo YES || echo NO)"
+          echo "::endgroup::"
