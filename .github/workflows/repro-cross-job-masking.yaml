@@ -1,9 +1,10 @@
 name: Repro — cross-job masked output
 
 # Demonstrates that a value registered with ::add-mask:: (the same mechanism
-# google-github-actions/get-secretmanager-secrets uses internally) becomes
-# *** when it crosses a job-output boundary into a downstream job's env or
-# `with:` block — even though it works fine as a same-job step output.
+# google-github-actions/get-secretmanager-secrets uses internally) is dropped
+# to an empty string when it crosses a job-output boundary into a downstream
+# job, whether the downstream job reads it via env: or via a reusable
+# workflow's with: input. Same-job step outputs are unaffected.
 
 on:
   push:
@@ -38,7 +39,7 @@ jobs:
           echo "unmasked sha256: $(printf '%s' "$SAME_JOB_UNMASKED" | sha256sum)"
           echo "::endgroup::"
 
-  consume_in_downstream_job:
+  consume_via_env_in_downstream_job:
     needs: produce_secret
     runs-on: ubuntu-latest
     steps:
@@ -47,12 +48,23 @@ jobs:
           DOWNSTREAM_MASKED: ${{ needs.produce_secret.outputs.MASKED_VALUE }}
           DOWNSTREAM_UNMASKED: ${{ needs.produce_secret.outputs.UNMASKED_VALUE }}
         run: |
-          echo "::group::Downstream env values — expected: masked one is literal '***', unmasked one is real"
+          echo "::group::Downstream env: values — masked one should be empty"
           echo "masked   length: ${#DOWNSTREAM_MASKED}"
           echo "unmasked length: ${#DOWNSTREAM_UNMASKED}"
           echo "masked   sha256: $(printf '%s' "$DOWNSTREAM_MASKED" | sha256sum)"
           echo "unmasked sha256: $(printf '%s' "$DOWNSTREAM_UNMASKED" | sha256sum)"
-          echo "masked   raw (will display as ***): $DOWNSTREAM_MASKED"
-          echo "unmasked raw                      : $DOWNSTREAM_UNMASKED"
+          echo "masked   raw (will display as ***): [$DOWNSTREAM_MASKED]"
+          echo "unmasked raw                      : [$DOWNSTREAM_UNMASKED]"
           echo "masked   equals literal '***' ? $([[ "$DOWNSTREAM_MASKED" == "***" ]] && echo YES || echo NO)"
+          echo "masked   empty                ? $([[ -z "$DOWNSTREAM_MASKED" ]] && echo YES || echo NO)"
           echo "::endgroup::"
+
+  consume_via_with_in_reusable_workflow:
+    # This is the same boundary the broken docker-build PR was using:
+    # `${{ needs.<job>.outputs.<key> }}` flowing into a reusable workflow's
+    # `with:` input.
+    needs: produce_secret
+    uses: ./.github/workflows/repro-dump-inputs.yaml
+    with:
+      MASKED: ${{ needs.produce_secret.outputs.MASKED_VALUE }}
+      UNMASKED: ${{ needs.produce_secret.outputs.UNMASKED_VALUE }}
