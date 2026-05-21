@@ -1,0 +1,58 @@
+name: Repro — cross-job masked output
+
+# Demonstrates that a value registered with ::add-mask:: (the same mechanism
+# google-github-actions/get-secretmanager-secrets uses internally) becomes
+# *** when it crosses a job-output boundary into a downstream job's env or
+# `with:` block — even though it works fine as a same-job step output.
+
+on:
+  push:
+    branches: ['repro/cross-job-masked-output']
+  workflow_dispatch:
+
+jobs:
+  produce_secret:
+    runs-on: ubuntu-latest
+    outputs:
+      MASKED_VALUE: ${{ steps.emit.outputs.MASKED_VALUE }}
+      UNMASKED_VALUE: ${{ steps.emit.outputs.UNMASKED_VALUE }}
+    steps:
+      - name: Checkout (needed to use local composite action)
+        uses: actions/checkout@v4
+
+      - name: Emit one masked and one unmasked output
+        id: emit
+        uses: ./.github/actions/emit-masked-output
+        with:
+          seed: ${{ github.run_id }}
+
+      - name: Sanity check — same-job step output access
+        env:
+          SAME_JOB_MASKED: ${{ steps.emit.outputs.MASKED_VALUE }}
+          SAME_JOB_UNMASKED: ${{ steps.emit.outputs.UNMASKED_VALUE }}
+        run: |
+          echo "::group::Same-job env values (the masked one shows *** in logs but the env var holds the real value)"
+          echo "masked   length: ${#SAME_JOB_MASKED}"
+          echo "unmasked length: ${#SAME_JOB_UNMASKED}"
+          echo "masked   sha256: $(printf '%s' "$SAME_JOB_MASKED" | sha256sum)"
+          echo "unmasked sha256: $(printf '%s' "$SAME_JOB_UNMASKED" | sha256sum)"
+          echo "::endgroup::"
+
+  consume_in_downstream_job:
+    needs: produce_secret
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read job outputs into env in a downstream job
+        env:
+          DOWNSTREAM_MASKED: ${{ needs.produce_secret.outputs.MASKED_VALUE }}
+          DOWNSTREAM_UNMASKED: ${{ needs.produce_secret.outputs.UNMASKED_VALUE }}
+        run: |
+          echo "::group::Downstream env values — expected: masked one is literal '***', unmasked one is real"
+          echo "masked   length: ${#DOWNSTREAM_MASKED}"
+          echo "unmasked length: ${#DOWNSTREAM_UNMASKED}"
+          echo "masked   sha256: $(printf '%s' "$DOWNSTREAM_MASKED" | sha256sum)"
+          echo "unmasked sha256: $(printf '%s' "$DOWNSTREAM_UNMASKED" | sha256sum)"
+          echo "masked   raw (will display as ***): $DOWNSTREAM_MASKED"
+          echo "unmasked raw                      : $DOWNSTREAM_UNMASKED"
+          echo "masked   equals literal '***' ? $([[ "$DOWNSTREAM_MASKED" == "***" ]] && echo YES || echo NO)"
+          echo "::endgroup::"
