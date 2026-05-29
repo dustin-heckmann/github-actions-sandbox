@@ -2,46 +2,43 @@ name: Test if conditions
 
 on:
   workflow_dispatch:
-    inputs:
-      scenario:
-        description: "Which scenario to test"
-        required: true
-        type: choice
-        options:
-          - failure
-          - failure-then-cancel
 
 jobs:
+  # Simulates a deploy job that always fails
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Simulate deploy failure
         run: exit 1
 
-  slow-job:
-    needs: [deploy]
-    if: always() && inputs.scenario == 'failure-then-cancel'
+  # Simulates a parallel job (e.g. resolve_aws_account) that runs concurrently
+  # with deploy and takes time. Cancel the workflow while this is sleeping.
+  slow-parallel-job:
     runs-on: ubuntu-latest
     steps:
       - name: Sleep (cancel the workflow while this is running)
         run: sleep 120
 
+  # All notify jobs depend on BOTH deploy (failed) and slow-parallel-job (running/cancelled).
+  # This puts them in "pending" state when the workflow is cancelled — testing whether
+  # the if: condition overrides the cancellation.
+
   notify-failure:
-    needs: [deploy]
+    needs: [deploy, slow-parallel-job]
     if: failure()
     runs-on: ubuntu-latest
     steps:
       - run: echo "fired — if failure()"
 
   notify-always-failure:
-    needs: [deploy]
+    needs: [deploy, slow-parallel-job]
     if: always() && failure()
     runs-on: ubuntu-latest
     steps:
       - run: echo "fired — if always() && failure()"
 
   notify-always-contains:
-    needs: [deploy]
+    needs: [deploy, slow-parallel-job]
     if: always() && contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
@@ -57,6 +54,8 @@ jobs:
     steps:
       - name: Print results
         run: |
+          echo "deploy:                 ${{ needs.deploy.result }}"
+          echo "slow-parallel-job:      ${{ needs.slow-parallel-job.result }}"
           echo "notify-failure:         ${{ needs.notify-failure.result }}"
           echo "notify-always-failure:  ${{ needs.notify-always-failure.result }}"
           echo "notify-always-contains: ${{ needs.notify-always-contains.result }}"
