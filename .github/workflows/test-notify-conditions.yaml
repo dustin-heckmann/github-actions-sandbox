@@ -1,4 +1,4 @@
-name: Test notify condition
+name: Test notify conditions
 
 on:
   workflow_dispatch:
